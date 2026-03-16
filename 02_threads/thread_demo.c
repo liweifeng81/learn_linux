@@ -77,12 +77,23 @@ static void demo_basic_threads(void)
 
     for (int i = 0; i < N_THREADS; i++) {
         ids[i] = i + 1;
-        CHECK(pthread_create, &tids[i], NULL, basic_worker, &ids[i]);
+        //CHECK(pthread_create, &tids[i], NULL, basic_worker, &ids[i]);
+        int err = pthread_create(&tids[i], NULL, basic_worker, &ids[i]);
+        if(err != 0) {
+            printf("Error creating thread %d: %s\n", i, strerror(err));
+            exit(1);
+        }
     }
     for (int i = 0; i < N_THREADS; i++) {
         void *retval;
-        CHECK(pthread_join, tids[i], &retval);
-        printf("[MAIN ] thread %d returned %ld\n", ids[i], (long)retval);
+        //CHECK(pthread_join, tids[i], &retval);
+        int err = pthread_join(tids[i], &retval);
+        if(err != 0) {
+            printf("Error creating thread %d: %s\n", i, strerror(err));
+            exit(1);
+        }
+        
+        printf("[MAIN ] thread %d, tids %lu, returned %ld\n", ids[i], tids[i], (long)retval);
     }
 #undef N_THREADS
 }
@@ -91,7 +102,8 @@ static void demo_basic_threads(void)
  * Demo 2: Mutex — protect a shared counter               *
  * ─────────────────────────────────────────────────────── */
 static long        g_counter = 0;
-static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+//static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_mutex ;
 
 static void *counter_increment(void *arg)
 {
@@ -107,6 +119,14 @@ static void *counter_increment(void *arg)
 static void demo_mutex(void)
 {
     separator("Demo 2: Mutex — Shared Counter");
+    //it's no need to use the attr
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&g_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+
+    //pthread_mutex_init(&g_mutex, NULL);
 #define N 4
 #define ITERS 100000
     pthread_t t[N];
@@ -174,7 +194,7 @@ static void *producer(void *arg)
     for (int i = 0; i < n; i++) {
         printf("[PRODUCER] pushing %d\n", i);
         queue_push(&g_queue, i);
-        usleep(50000); /* 50 ms */
+        usleep(1); /* 1 us */
     }
     queue_push(&g_queue, SENTINEL); /* signal consumer to stop */
     return NULL;
@@ -204,6 +224,19 @@ static void demo_cond_var(void)
 }
 
 /* ─────────────────────────────────────────────────────── *
+ * Demo 3.1 use semaphore instead of cond var for Producer/Consumer *
+ * ─────────────────────────────────────────────────────── */
+static void demo_sem_prod_consumer(void)
+{
+    separator("Demo 3.5: semaphor — Producer/Consumer");
+    pthread_t prod, cons;
+    int n = 10;
+    CHECK(pthread_create, &prod, NULL, producer, &n);
+    CHECK(pthread_create, &cons, NULL, consumer, NULL);
+    CHECK(pthread_join, prod, NULL);
+    CHECK(pthread_join, cons, NULL);
+}
+/* ─────────────────────────────────────────────────────── *
  * Demo 4: Read-Write Lock                                 *
  * ─────────────────────────────────────────────────────── */
 static int            g_shared_val = 0;
@@ -214,7 +247,7 @@ static void *reader(void *arg)
     int id = *(int *)arg;
     pthread_rwlock_rdlock(&g_rwlock);
     printf("[READER %d] shared_val = %d\n", id, g_shared_val);
-    usleep(200000);
+    usleep(20000);
     pthread_rwlock_unlock(&g_rwlock);
     return NULL;
 }
@@ -225,7 +258,7 @@ static void *writer(void *arg)
     pthread_rwlock_wrlock(&g_rwlock);
     g_shared_val = id * 100;
     printf("[WRITER %d] set shared_val = %d\n", id, g_shared_val);
-    usleep(100000);
+    usleep(10000);
     pthread_rwlock_unlock(&g_rwlock);
     return NULL;
 }
@@ -234,17 +267,22 @@ static void demo_rwlock(void)
 {
     separator("Demo 4: Read-Write Lock");
 #define NR 3
-    pthread_t rt[NR], wt;
-    int ids[NR + 1];
+    pthread_t rt[NR], wt[2];
+    int ids[NR + 2];
+    ids[NR] = 98;
+    ids[NR+1] = 99;
+    CHECK(pthread_create, &wt[0], NULL, writer, &ids[NR]);
+    CHECK(pthread_create, &wt[1], NULL, writer, &ids[NR+1]);
+
     for (int i = 0; i < NR; i++) {
         ids[i] = i + 1;
         CHECK(pthread_create, &rt[i], NULL, reader, &ids[i]);
     }
-    ids[NR] = 99;
-    CHECK(pthread_create, &wt, NULL, writer, &ids[NR]);
+
     for (int i = 0; i < NR; i++)
         CHECK(pthread_join, rt[i], NULL);
-    CHECK(pthread_join, wt, NULL);
+    CHECK(pthread_join, wt[0], NULL);
+    CHECK(pthread_join, wt[1], NULL);
 #undef NR
 }
 
@@ -288,6 +326,7 @@ int main(void)
     demo_basic_threads();
     demo_mutex();
     demo_cond_var();
+    demo_sem_prod_consumer();
     demo_rwlock();
     demo_tls();
 
