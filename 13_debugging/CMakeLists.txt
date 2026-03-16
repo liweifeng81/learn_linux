@@ -1,3 +1,4 @@
+project(debugging C)
 # 13_debugging/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

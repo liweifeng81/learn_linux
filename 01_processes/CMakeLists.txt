@@ -1,3 +1,4 @@
+project(processes C)
 # 01_processes/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

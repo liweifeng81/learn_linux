@@ -1,3 +1,4 @@
+project(ipc C)
 # 03_ipc/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

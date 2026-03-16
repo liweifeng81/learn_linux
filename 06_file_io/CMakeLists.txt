@@ -1,3 +1,4 @@
+project(file_io C)
 # 06_file_io/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

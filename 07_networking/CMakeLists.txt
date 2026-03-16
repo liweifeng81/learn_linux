@@ -1,3 +1,4 @@
+project(networking C)
 # 07_networking/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

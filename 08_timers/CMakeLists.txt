@@ -1,3 +1,4 @@
+project(timers C)
 # 08_timers/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 

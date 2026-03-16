@@ -1,6 +1,6 @@
+project(threads C)
 # 02_threads/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
-project(thread)
 
 find_package(Threads REQUIRED)
 

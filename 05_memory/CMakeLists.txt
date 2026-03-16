@@ -1,3 +1,4 @@
+project(memory C)
 # 05_memory/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 
