@@ -24,7 +24,7 @@
  *      PID stays the same, memory/code/data are replaced.
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -46,6 +46,7 @@ static void demo_fork_wait(void)
 {
     separator("Demo 1: fork() + wait()");
 
+    fflush(stdout);
     pid_t pid = fork();
     if (pid < 0) {
         perror("fork");
@@ -83,7 +84,7 @@ static void demo_exec(void)
     if (pid == 0) {
         /* Replace child image with /bin/ls */
         printf("[CHILD ] about to execl /bin/ls …\n");
-        execl("/bin/ls", "ls", "-lh", "/tmp", (char *)NULL);
+        execlp("ls", "ls", "-lh", ".", (char *)NULL);
         /* execl only returns on error */
         perror("execl");
         exit(EXIT_FAILURE);
@@ -97,7 +98,8 @@ static void demo_exec(void)
 static void demo_zombie(void)
 {
     separator("Demo 3: Zombie Process");
-    printf("Tip: run 'ps aux | grep Z' in another terminal to see the zombie\n\n");
+    //ps aux | awk '$8 ~ /Z/ {printf "user: %s, pid: %s, state:%s, process:%s\n", $1, $2,$8, $11}'
+    printf("Tip: run  ps aux | grep Z in another terminal to see the zombie\n\n");
 
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); return; }
@@ -107,9 +109,9 @@ static void demo_zombie(void)
                getpid());
         exit(0);
     } else {
-        printf("[PARENT] PID=%d NOT calling wait() for 5 s — child is zombie!\n",
+        printf("[PARENT] PID=%d NOT calling wait() for 10 s — child is zombie!\n",
                getpid());
-        sleep(5);   /* child is zombie during this window */
+        sleep(10);   /* child is zombie during this window */
         printf("[PARENT] now reaping zombie with wait()\n");
         wait(NULL);
         printf("[PARENT] zombie reaped.\n");
@@ -126,7 +128,7 @@ static void demo_orphan(void)
 
     if (pid == 0) {
         /* Child runs for a while after parent exits */
-        sleep(2);
+        sleep(180);
         printf("[ORPHAN] PID=%d, PPID=%d (adopted by init/systemd=1)\n",
                getpid(), getppid());
         exit(0);
@@ -156,8 +158,7 @@ static void demo_waitpid_nohang(void)
             pid_t r = waitpid(pid, &status, WNOHANG);
             if (r == 0) {
                 printf("[PARENT] child still running (poll %d)…\n", i + 1);
-                sleep(500 * 1000 / 1000000 + 1); /* ~0.5 s */
-                usleep(500000);
+                usleep(500000); /* 0.5 s */
             } else if (r > 0) {
                 printf("[PARENT] child exited, code=%d\n", WEXITSTATUS(status));
                 break;
@@ -172,6 +173,7 @@ static void demo_waitpid_nohang(void)
 /* ── main ─────────────────────────────────────────────── */
 int main(void)
 {
+    setvbuf(stdout, NULL, _IOLBF, 0);  /* line-buffer even when redirected */
     printf("=== Embedded Linux Demo: Processes ===\n");
     printf("Parent PID: %d\n", getpid());
 
@@ -181,9 +183,7 @@ int main(void)
     demo_waitpid_nohang();
 
     /* Zombie demo needs its own process so parent can wait properly */
-    pid_t z = fork();
-    if (z == 0) { demo_zombie(); exit(0); }
-    waitpid(z, NULL, 0);
+    demo_zombie();
 
     /* Orphan — parent will exit, so we fork a wrapper */
     pid_t o = fork();
