@@ -226,13 +226,66 @@ static void demo_cond_var(void)
 /* ─────────────────────────────────────────────────────── *
  * Demo 3.1 use semaphore instead of cond var for Producer/Consumer *
  * ─────────────────────────────────────────────────────── */
+#include <semaphore.h>
+typedef struct {
+    int       data[QUEUE_SIZE];
+    int       head, tail, count;
+    pthread_mutex_t lock;
+    sem_t     sem;
+} QueueSem_t;
+
+static QueueSem_t _sem_queue;
+static int raw_queue_push(QueueSem_t *q, int val) {
+    pthread_mutex_lock(&q->lock);
+    int ret = 0;
+    if(q->count != QUEUE_SIZE) {
+        q->data[q->tail] = val;
+        q->tail = (q->tail + 1) % QUEUE_SIZE;
+        q->count++;
+        sem_post(&_sem_queue.sem);
+        ret = 1;
+    }
+    pthread_mutex_unlock(&q->lock);
+    return ret;
+}
+static int raw_queue_pop(QueueSem_t *q) {
+    sem_wait(&q->sem);
+    //it could not get run, what to do?
+    pthread_mutex_lock(&q->lock);
+    int val = q->data[q->head];
+    q->head = (q->head + 1) % QUEUE_SIZE;
+    q->count--;
+    pthread_mutex_unlock(&q->lock);
+    return val;
+}
+static void * producer_sem(void *arg) {
+    int count = *(int *)arg;
+    int produced = 0;
+    while(produced < count){
+        printf("[producer] pushing %d\n", produced);
+        produced += raw_queue_push(&_sem_queue, produced);
+    }
+    raw_queue_push(&_sem_queue, SENTINEL);
+    return NULL;
+}
+static void *consumer_sem(void *arg) {
+    while(1) {
+        int val = raw_queue_pop(&_sem_queue);
+        printf("[cunsumer] get: %d\n", val);
+        if(val == SENTINEL)
+            break;
+    }
+    return NULL;
+}
 static void demo_sem_prod_consumer(void)
 {
-    separator("Demo 3.5: semaphor — Producer/Consumer");
+    separator("Demo 3.1: semaphor — Producer/Consumer");
     pthread_t prod, cons;
+    pthread_mutex_init(&_sem_queue.lock, NULL);
+    sem_init(&_sem_queue.sem, 0, 0);
     int n = 10;
-    CHECK(pthread_create, &prod, NULL, producer, &n);
-    CHECK(pthread_create, &cons, NULL, consumer, NULL);
+    CHECK(pthread_create, &prod, NULL, producer_sem, &n);
+    CHECK(pthread_create, &cons, NULL, consumer_sem, NULL);
     CHECK(pthread_join, prod, NULL);
     CHECK(pthread_join, cons, NULL);
 }
