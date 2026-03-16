@@ -1,4 +1,7 @@
 # 13_debugging/CMakeLists.txt
+
+find_package(Threads REQUIRED)
+
 add_executable(debug_demo debug_demo.c)
 
 # Debug-friendly compile flags

@@ -1,4 +1,7 @@
 # 03_ipc/CMakeLists.txt
+
+find_package(Threads REQUIRED)
+
 add_executable(pipe_demo   pipe_demo.c)
 add_executable(shm_demo    shm_demo.c)
 add_executable(mq_demo     mq_demo.c)
