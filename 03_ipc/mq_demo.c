@@ -23,7 +23,7 @@
  *      transitions from empty → non-empty.
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,10 +62,10 @@ static void demo_basic_mq(void)
 {
     separator("Demo 1: POSIX MQ — Send / Receive with Priority");
 
-    mq_unlink(MQ_NAME);
-    struct mq_attr attr = make_attr(0);
+    // mq_unlink(MQ_NAME);
+    struct mq_attr attr = make_attr(0);//0:blocking when full/empty,  O_NONBLOCK: return error EAGAIN
     mqd_t mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, 0666, &attr);
-    if (mq == (mqd_t)-1) { perror("mq_open"); return; }
+    if (mq == (mqd_t)-1 && errno != EEXIST) { perror("mq_open"); return; }
 
     /* Send messages with varying priorities (higher number = higher priority) */
     const char *msgs[] = { "LOW priority msg",  "HIGH priority msg", "MED priority msg" };
@@ -105,7 +105,7 @@ static void demo_multiprocess_mq(void)
     if (pid < 0) { perror("fork"); return; }
 
     if (pid == 0) {
-        /* ── CONSUMER ───────────────────────────────────── */
+        /* ── CONSUMER ────────child───────────────────────────── */
         mqd_t mq = mq_open(MQ_NAME, O_RDONLY | O_CREAT, 0666, &attr);
         if (mq == (mqd_t)-1) { perror("mq_open(consumer)"); exit(1); }
         char buf[MAX_SIZE];
@@ -118,7 +118,7 @@ static void demo_multiprocess_mq(void)
         mq_close(mq);
         exit(0);
     } else {
-        /* ── PRODUCER ───────────────────────────────────── */
+        /* ── PRODUCER ────────parent───────────────────────────── */
         usleep(50000); /* give consumer time to open */
         mqd_t mq = mq_open(MQ_NAME, O_WRONLY | O_CREAT, 0666, &attr);
         if (mq == (mqd_t)-1) { perror("mq_open(producer)"); exit(1); }
@@ -127,10 +127,10 @@ static void demo_multiprocess_mq(void)
             snprintf(buf, MAX_SIZE, "Message %d from PID %d", i, getpid());
             mq_send(mq, buf, strlen(buf) + 1, 5);
             printf("[PRODUCER] sent: \"%s\"\n", buf);
-            usleep(100000);
+            usleep(50000);//to wait for consumer to consume
         }
         mq_close(mq);
-        waitpid(pid, NULL, 0);
+        wait(NULL);
         mq_unlink(MQ_NAME);
     }
 }

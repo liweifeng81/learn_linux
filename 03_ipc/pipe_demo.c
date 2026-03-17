@@ -19,7 +19,7 @@
  *      and allows unrelated processes to communicate.
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,19 +52,21 @@ static void demo_anon_pipe(void)
 
     if (pid == 0) {
         /* CHILD: close write end, read from pipe */
+        printf("[child] fd[0]=%d, fd[1]=%d]\n", fd[0], fd[1]);
         close(fd[1]);
         char buf[128];
         ssize_t n = read(fd[0], buf, sizeof(buf) - 1);
         buf[n] = '\0';
-        printf("[CHILD ] received: \"%s\"\n", buf);
+        printf("[CHILD ] via fd[0]=%d received: \"%s\"\n", fd[0],buf);
         close(fd[0]);
         exit(0);
     } else {
         /* PARENT: close read end, write to pipe */
+        printf("[parent] fd[0]=%d, fd[1]=%d]\n", fd[0], fd[1]);
         close(fd[0]);
         const char *msg = "Hello from parent via anonymous pipe!";
         write(fd[1], msg, strlen(msg));
-        printf("[PARENT] sent: \"%s\"\n", msg);
+        printf("[PARENT] via fd[1]=%d sent: \"%s\"\n", fd[1], msg);
         close(fd[1]); /* EOF — child's read() will return */
         waitpid(pid, NULL, 0);
     }
@@ -78,7 +80,7 @@ static void demo_named_pipe(void)
     separator("Demo 2: Named Pipe / FIFO (mkfifo())");
 
     /* Create FIFO (ignore EEXIST) */
-    if (mkfifo(FIFO_PATH, 0666) == -1 && errno != EEXIST) {
+    if (mkfifo(FIFO_PATH, 0644) == -1 && errno != EEXIST) {
         perror("mkfifo"); return;
     }
 

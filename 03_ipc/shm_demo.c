@@ -20,7 +20,7 @@
  *      Unnamed (sem_init with pshared=1) is embedded in shared memory.
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +58,7 @@ int main(void)
     close(shm_fd);
 
     /* ── Create semaphores ────────────────────────────── */
+    //it's better to check whether sem_w and sem_r is already existing by errno == EEXIST
     sem_unlink(SEM_WRITE); sem_unlink(SEM_READ);
     sem_t *sem_w = sem_open(SEM_WRITE, O_CREAT | O_EXCL, 0666, 1); /* writer ready */
     sem_t *sem_r = sem_open(SEM_READ,  O_CREAT | O_EXCL, 0666, 0); /* reader waits */
