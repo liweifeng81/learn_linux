@@ -40,6 +40,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <time.h>
 
 /* ── helpers ──────────────────────────────────────────── */
 static void separator(const char *title)
@@ -54,7 +55,18 @@ static void separator(const char *title)
  * ─────────────────────────────────────────────────────── */
 static volatile sig_atomic_t g_sigint_count = 0;
 
-static void sigint_handler(int signo, siginfo_t *info, void *ctx)
+static void sigint_handler_1_arg(int signo)
+{
+    /* Only async-signal-safe calls here! */
+    char msg[100];
+    //warning sprintf is not async-signal-safe!!!!
+    sprintf(msg, "[SIGNAL] Caught signal %d\n", signo);
+
+    write(STDOUT_FILENO, msg, strlen(msg));
+    g_sigint_count++;
+
+}
+static void sigint_handler_3_arg(int signo, siginfo_t *info, void *ctx)
 {
     (void)ctx;
     /* Only async-signal-safe calls here! */
@@ -64,28 +76,62 @@ static void sigint_handler(int signo, siginfo_t *info, void *ctx)
 
     (void)signo; (void)info;
 }
+static void demo_signal(void)
+{
+    separator("Demo 0: signal() —  Handler");
+
+    printf("press ctrl+c to rais a SIGINT signal, \
+        or send SIGTERM by [kill pid=%d]\n", getpid());
+    void (*old_handler)(int) = signal(SIGINT, sigint_handler_1_arg);
+    void (*term_handler)(int) = signal(SIGTERM, sigint_handler_1_arg);
+    if(old_handler == SIG_ERR || term_handler == SIG_ERR) {
+        perror("signal error");
+        return;
+    }
+    raise(SIGINT);
+    raise(SIGTERM);
+    int remaining = 10;
+    while (remaining > 0)
+        remaining = sleep(remaining);
+    signal(SIGINT, old_handler);
+    signal(SIGTERM, term_handler);
+    printf("g_sigint_count = %d\n", g_sigint_count);
+}
 
 static void demo_sigaction(void)
 {
     separator("Demo 1: sigaction() — Reliable Handler");
-
+    g_sigint_count = 0;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = sigint_handler;
-    sa.sa_flags     = SA_SIGINFO | SA_RESTART; /* SA_RESTART: auto-restart syscalls */
+    //sa.sa_sigaction = sigint_handler_3_arg;
+    //sa.sa_flags     =  SA_SIGINFO | SA_RESTART; 
+    sa.sa_handler = sigint_handler_1_arg;
+    sa.sa_flags     =  SA_RESTART; /* SA_RESTART: auto-restart syscalls */
     sigemptyset(&sa.sa_mask);
     /* Block SIGTERM while handling SIGINT */
     sigaddset(&sa.sa_mask, SIGTERM);
 
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("sigaction sig int");
         return;
     }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
+        perror("sigaction sig term");
+        return;
+    }
+    printf("Sending 2 SIGINT to self with raise()…\n");
+    printf("press ctrl+c also raise SIGINT\n");
+    printf("try to raise SIGTERM by [kill %d] by sleep in the handler\n", getpid());
 
-    printf("Sending SIGINT to self with raise()…\n");
     raise(SIGINT);
-    raise(SIGINT);
-    printf("g_sigint_count = %d (expected 2)\n", g_sigint_count);
+    raise(SIGTERM);
+
+    struct timespec ts = { .tv_sec = 10, .tv_nsec = 500000000 }; // 10.5 seconds
+    //nanosleep(&ts, NULL);
+    while (nanosleep(&ts, &ts) == -1 && errno == EINTR);
+
+    printf("g_sigint_count = %d)\n", g_sigint_count);
 
     /* Restore default */
     sa.sa_handler = SIG_DFL;
@@ -198,7 +244,16 @@ static void demo_self_pipe(void)
     close(g_pipe_fds[0]);
     close(g_pipe_fds[1]);
 }
-
+static void demo_pipe(void) {
+    separator("Demo 4.1: Self-Pipe Trick simple");
+    if(pipe(g_pipe_fds) == -1) { perror("pipe"); return; }
+    write(g_pipe_fds[1], "A", 1);
+    char buf[8];
+    int n = read(g_pipe_fds[0], buf, 1);
+    printf("pip read amout %d: %c", n, buf[0]);
+    close(g_pipe_fds[0]);
+    close(g_pipe_fds[1]);
+}
 /* ─────────────────────────────────────────────────────── *
  * Demo 5: signalfd (Linux-specific)                      *
  * ─────────────────────────────────────────────────────── */
@@ -234,11 +289,12 @@ static void demo_signalfd(void)
 int main(void)
 {
     printf("=== Embedded Linux Demo: Signals ===\n");
-
+    demo_signal();
     demo_sigaction();
     demo_sigprocmask();
     demo_realtime_signal();
     demo_self_pipe();
+    demo_pipe();
     demo_signalfd();
 
     printf("\n[DONE] Signal demo complete.\n");
