@@ -41,6 +41,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/epoll.h>
+#include <sys/wait.h>
 #include <sys/sendfile.h>
 #include <sys/uio.h>
 #include <termios.h>
@@ -133,7 +134,7 @@ static void demo_select(void)
     write(pipefd[1], "X", 1);
     FD_ZERO(&rfds);
     FD_SET(pipefd[0], &rfds);
-    tv.tv_sec = 1; tv.tv_usec = 0;
+    //tv.tv_sec = 1; tv.tv_usec = 0;
     ret = select(pipefd[0] + 1, &rfds, NULL, NULL, &tv);
     if (ret > 0 && FD_ISSET(pipefd[0], &rfds))
         printf("select() immediately detected data — fd is readable ✓\n");
@@ -153,6 +154,11 @@ static void demo_epoll(void)
     /* Make read-end non-blocking (required for EPOLLET) */
     fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
 
+    int pipefd2[2];
+    if (pipe(pipefd2) < 0) { perror("pipe"); return; }
+    /* Make read-end non-blocking (required for EPOLLET) */
+    fcntl(pipefd2[0], F_SETFL, O_NONBLOCK);
+
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     if (epfd < 0) { perror("epoll_create1"); return; }
 
@@ -160,29 +166,42 @@ static void demo_epoll(void)
     ev.events   = EPOLLIN | EPOLLET; /* Edge-Triggered */
     ev.data.fd  = pipefd[0];
     epoll_ctl(epfd, EPOLL_CTL_ADD, pipefd[0], &ev);
+    ev.data.fd  = pipefd2[0];
+    epoll_ctl(epfd, EPOLL_CTL_ADD, pipefd2[0], &ev);
 
-    /* Write two chunks to pipe */
     write(pipefd[1], "Hello", 5);
-    write(pipefd[1], "World", 5);
+    write(pipefd2[1], "Hello2", 6);
 
     struct epoll_event events[4];
     int nfds = epoll_wait(epfd, events, 4, 500 /*ms*/);
-    printf("epoll_wait returned %d event(s)\n", nfds);
+    printf("1st epoll_wait returned %d event(s), write again without read\n", nfds);
 
-    /* With EPOLLET: only ONE event even though we wrote twice */
-    /* Must drain fully (read until EAGAIN) */
+    // write again without read
+    write(pipefd[1], "World", 5);
+    nfds = epoll_wait(epfd, events, 4, 500 /*ms*/);
+    printf("2nd epoll_wait returned %d event(s)\n", nfds);
+
+    /* With EPOLLET:(Edge Trigger) only ONE event trigger, the pipefd2 is not 
+       W/O EPOLLET:(Level Trigger) still 2 event trigger. events[0] still get 10 bytes.
+    */
+
+    char buf[32];
+    int total = 0;
     for (int i = 0; i < nfds; i++) {
-        char buf[32];
         ssize_t n;
-        int total = 0;
-        while ((n = read(events[i].data.fd, buf, sizeof(buf))) > 0)
+        while ((n = read(events[i].data.fd, buf+total, sizeof(buf))) > 0) {
             total += (int)n;
-        printf("  fd=%d drained %d bytes (EAGAIN hit — fully consumed)\n",
-               events[i].data.fd, total);
+            printf("  fd=%d drained %ld bytes\n",
+                events[i].data.fd, n);
+        }
+            
     }
+    buf[total] = 0;
+    printf(" total get %d bytes: %s )\n",total, buf);
 
     close(epfd);
     close(pipefd[0]); close(pipefd[1]);
+    close(pipefd2[0]); close(pipefd2[1]);    
 }
 
 /* ─────────────────────────────────────────────────────── *
