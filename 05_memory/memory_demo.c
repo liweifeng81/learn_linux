@@ -73,7 +73,8 @@ static void demo_address_layout(void)
     printf("  .bss   (zero)    : %p  (value=%d)\n",         (void *)&bss_var, bss_var);
     printf("  heap             : %p\n",                      (void *)heap_var);
     printf("  stack            : %p\n",                      (void *)&stack_var);
-
+    //run [nm memory_demo] can get those info as well
+    
     printf("\n  /proc/self/maps (first 8 lines):\n");
     FILE *f = fopen("/proc/self/maps", "r");
     if (f) {
@@ -237,7 +238,7 @@ static void demo_leak_tracking(void)
 
     char *a = tracked_malloc(128);
     char *b = tracked_malloc(256);
-    tracked_malloc(64); /* intentional leak — no tracked_free */
+    char *leak = tracked_malloc(64); /* intentional leak — no tracked_free */
 
     tracked_free(a);
     tracked_free(b);
