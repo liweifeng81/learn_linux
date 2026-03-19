@@ -33,6 +33,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/epoll.h>
 
 #define BUF_SIZE 1024
 
@@ -42,6 +43,9 @@ static int connect_with_timeout(const char *host, const char *port, int timeout_
         .ai_family   = AF_UNSPEC,   /* IPv4 or IPv6 */
         .ai_socktype = SOCK_STREAM,
     };
+    int epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (epfd < 0) { perror("epoll_create1"); return -1; }
+
     struct addrinfo *res = NULL;
     int err = getaddrinfo(host, port, &hints, &res);
     if (err) {
@@ -51,16 +55,17 @@ static int connect_with_timeout(const char *host, const char *port, int timeout_
 
     int sfd = -1;
     for (struct addrinfo *r = res; r; r = r->ai_next) {
+        int connected = 0;
         sfd = socket(r->ai_family, r->ai_socktype | SOCK_CLOEXEC, r->ai_protocol);
         if (sfd < 0) continue;
 
-        /* Non-blocking for timed connect */
+        /* Non-blocking for timed connect, otherwise it could block long time if fail*/
         int flags = fcntl(sfd, F_GETFL);
         fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
 
-        /* TCP_NODELAY: disable Nagle */
+        /* TCP_NODELAY: disable Nagle -- no need*/
         int opt = 1;
-        setsockopt(sfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+        //setsockopt(sfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
         int rc = connect(sfd, r->ai_addr, r->ai_addrlen);
         if (rc == 0) {
@@ -70,24 +75,42 @@ static int connect_with_timeout(const char *host, const char *port, int timeout_
         }
         if (errno == EINPROGRESS) {
             /* Wait for connect() to complete */
+            /* // change select to epoll
             fd_set wfds;
             FD_ZERO(&wfds);
             FD_SET(sfd, &wfds);
             struct timeval tv = { .tv_sec = timeout_s };
             rc = select(sfd + 1, NULL, &wfds, NULL, &tv);
-            if (rc > 0) {
-                int so_err;
-                socklen_t len = sizeof(so_err);
-                getsockopt(sfd, SOL_SOCKET, SO_ERROR, &so_err, &len);
-                if (so_err == 0) {
-                    fcntl(sfd, F_SETFL, flags);
-                    break; /* success */
+            */
+
+            struct epoll_event ev;
+            ev.events   = EPOLLIN | EPOLLOUT; //actuall it's EPOLLOUT
+            ev.data.fd  = sfd;
+            epoll_ctl(epfd, EPOLL_CTL_ADD, sfd, &ev);
+            struct epoll_event events[4];
+            int nfds = epoll_wait(epfd, events, 4, timeout_s * 1000 /*ms*/);
+
+            for(int i=0; i<nfds; i++) {
+                if(!(events[i].events & EPOLLERR)) {
+                    int so_err;
+                    socklen_t len = sizeof(so_err);
+                    getsockopt(sfd, SOL_SOCKET, SO_ERROR, &so_err, &len);
+                    if (so_err == 0) {
+                        fcntl(sfd, F_SETFL, flags); //set back to block mode
+                        connected = 1;
+                        break;
+                    }
                 }
             }
         }
-        close(sfd);
-        sfd = -1;
+        if(connected) {
+            break;
+        } else {
+            close(sfd);
+            sfd = -1;
+        }
     }
+    close(epfd);
     freeaddrinfo(res);
     return sfd;
 }
