@@ -139,10 +139,12 @@ static void demo_posix_timer(void)
     sa.sa_sigaction = posix_timer_handler;
     sa.sa_flags     = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
-    sigaction(SIGRTMIN, &sa, NULL);
+    sigaction(SIGRTMIN, &sa, NULL); //todo: this is not reset!
 
-    timer_create(CLOCK_MONOTONIC, &sev, &tid);
-    sev.sigev_value.sival_ptr = &tid; /* update after create */
+    if (timer_create(CLOCK_MONOTONIC, &sev, &tid) == -1) {
+        perror("timer_create");
+        return;
+    }
 
     struct itimerspec its = {
         .it_interval = { .tv_nsec = 100000000 }, /* 100 ms */
@@ -171,26 +173,38 @@ static void demo_timerfd(void)
     if (tfd < 0) { perror("timerfd_create"); return; }
 
     struct itimerspec its = {
-        .it_interval = { .tv_nsec = 200000000 }, /* 200 ms */
-        .it_value    = { .tv_nsec = 200000000 },
+        .it_interval = { .tv_nsec = 100000000 }, /* 100 ms */
+        .it_value    = { .tv_nsec = 100000000 },
     };
-    timerfd_settime(tfd, 0, &its, NULL);
-
+    if (timerfd_settime(tfd, 0, &its, NULL) < 0) {
+        perror("timerfd_settime");
+        close(tfd); return;
+    }
     int epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (epfd < 0) { perror("epoll_create1"); close(tfd); return; }
     struct epoll_event ev = { .events = EPOLLIN, .data.fd = tfd };
-    epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev);
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev) == -1) {
+        perror("epoll_ctl");
+        close(epfd);
+        close(tfd);
+        return;
+    }
 
-    printf("timerfd firing every 200ms — waiting for 5 expirations…\n");
+    printf("timerfd firing every 100ms — waiting for 5 expirations…\n");
     int fire_count = 0;
     while (fire_count < 5) {
         struct epoll_event events[1];
         int n = epoll_wait(epfd, events, 1, 1000);
         if (n > 0) {
             uint64_t exp;
-            read(tfd, &exp, sizeof(exp)); /* number of expirations since last read */
-            fire_count += (int)exp;
-            printf("  timerfd fired, exp=%llu, total=%d\n",
-                   (unsigned long long)exp, fire_count);
+            /* number of expirations since last read */
+            if (read(tfd, &exp, sizeof(exp)) == sizeof(exp)) {
+                fire_count += (int)exp;
+                printf("  timerfd fired, exp=%llu, total=%d\n",
+                       (unsigned long long)exp, fire_count);
+            } else {
+                perror("read timerfd");
+            }
         }
     }
 
