@@ -37,6 +37,7 @@
 #include <errno.h>
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
+#include <sys/time.h>
 #include <stdint.h>
 
 static void separator(const char *t)
@@ -88,8 +89,9 @@ static void demo_setitimer(void)
     separator("Demo 2: setitimer() / SIGALRM");
 
     struct sigaction sa = { .sa_handler = sigalrm_handler };
+    struct sigaction old_sa;
     sigemptyset(&sa.sa_mask);
-    sigaction(SIGALRM, &sa, NULL);
+    sigaction(SIGALRM, &sa, &old_sa);
 
     /* Fire every 100 ms, starting after 100 ms */
     struct itimerval itv = {
@@ -105,6 +107,7 @@ static void demo_setitimer(void)
     /* Disarm */
     memset(&itv, 0, sizeof(itv));
     setitimer(ITIMER_REAL, &itv, NULL);
+    sigaction(SIGALRM, &old_sa, NULL);
     printf("Got %d SIGALRM signals ✓\n", g_alarm_count);
 }
 

@@ -39,13 +39,14 @@
 
 static int connect_with_timeout(const char *host, const char *port, int timeout_s)
 {
+    int epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (epfd < 0) { perror("epoll_create1"); return -1; }
+
+    // get the address in addrinfo struct.
     struct addrinfo hints = {
         .ai_family   = AF_UNSPEC,   /* IPv4 or IPv6 */
         .ai_socktype = SOCK_STREAM,
     };
-    int epfd = epoll_create1(EPOLL_CLOEXEC);
-    if (epfd < 0) { perror("epoll_create1"); return -1; }
-
     struct addrinfo *res = NULL;
     int err = getaddrinfo(host, port, &hints, &res);
     if (err) {
