@@ -80,7 +80,7 @@ static void demo_clock_nanosleep(void)
 /* ─────────────────────────────────────────────────────── *
  * Demo 2: setitimer / SIGALRM                           *
  * ─────────────────────────────────────────────────────── */
-static volatile int g_alarm_count = 0;
+static sig_atomic_t g_alarm_count = 0;
 
 static void sigalrm_handler(int s) { (void)s; g_alarm_count++; }
 
@@ -114,7 +114,7 @@ static void demo_setitimer(void)
 /* ─────────────────────────────────────────────────────── *
  * Demo 3: POSIX timer_create with SIGEV_SIGNAL           *
  * ─────────────────────────────────────────────────────── */
-static volatile int g_posix_count = 0;
+static sig_atomic_t g_posix_count = 0;
 
 static void posix_timer_handler(int s, siginfo_t *info, void *ctx)
 {
