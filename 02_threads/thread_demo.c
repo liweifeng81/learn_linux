@@ -257,14 +257,15 @@ static int raw_queue_pop(QueueSem_t *q) {
 }
 static void * producer_sem(void *arg) {
     int count = *(int *)arg;
-    for(size_t i = 0; i < count; i++){
-        printf("[producer] pushing %lu\n", i);
+    for(int i = 0; i < count; i++){
+        printf("[producer] pushing %d\n", i);
         raw_queue_push(&_sem_queue, i);
     }
     raw_queue_push(&_sem_queue, SENTINEL);
     return NULL;
 }
 static void *consumer_sem(void *arg) {
+    (void)arg;
     while(1) {
         int val = raw_queue_pop(&_sem_queue);
         printf("[cunsumer] get: %d\n", val);

@@ -65,7 +65,7 @@ static int connect_with_timeout(const char *host, const char *port, int timeout_
         fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
 
         /* TCP_NODELAY: disable Nagle -- no need*/
-        int opt = 1;
+        //int opt = 1;
         //setsockopt(sfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
         int rc = connect(sfd, r->ai_addr, r->ai_addrlen);

@@ -67,7 +67,7 @@ static void demo_address_layout(void)
     int *heap_var  = malloc(sizeof(int));
     *heap_var      = 7;
 
-    printf("  .text  (code)    : %p  (function address)\n", (void *)demo_address_layout);
+    printf("  .text  (code)    : %lx  (function address)\n", (uintptr_t)demo_address_layout);
     printf("  .rodata          : %p  (const value=%d)\n",   (void *)&rodata_var, rodata_var);
     printf("  .data  (init'd)  : %p  (value=%d)\n",         (void *)&data_var, data_var);
     printf("  .bss   (zero)    : %p  (value=%d)\n",         (void *)&bss_var, bss_var);
@@ -239,7 +239,7 @@ static void demo_leak_tracking(void)
     char *a = tracked_malloc(128);
     char *b = tracked_malloc(256);
     char *leak = tracked_malloc(64); /* intentional leak — no tracked_free */
-
+    leak[0] = 'L'; /* use it to avoid "allocated but not used" warning */
     tracked_free(a);
     tracked_free(b);
     /* 'c' (64 bytes) was never freed */
