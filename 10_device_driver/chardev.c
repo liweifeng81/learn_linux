@@ -55,8 +55,8 @@ MODULE_DESCRIPTION("Character device driver skeleton");
 MODULE_VERSION("1.0");
 
 /* ── Configuration ────────────────────────────────────── */
-#define DRIVER_NAME   "chardev"
-#define DEVICE_NAME   "chardev0"
+#define DRIVER_NAME   "mychardev"
+#define DEVICE_NAME   "mychardev0"
 #define BUF_SIZE      4096
 #define NUM_DEVICES   1
 
@@ -245,7 +245,7 @@ static int __init chardev_init(void)
     if (ret < 0) { printk(KERN_ERR "[chardev] cdev_add failed\n"); goto err_buf; }
 
     /* Create /dev/chardev0 via udev */
-    g_class = class_create(THIS_MODULE, DRIVER_NAME);
+    g_class = class_create(DRIVER_NAME);
     if (IS_ERR(g_class)) { ret = PTR_ERR(g_class); goto err_cdev; }
 
     if (IS_ERR(device_create(g_class, NULL, g_devno, NULL, DEVICE_NAME))) {
