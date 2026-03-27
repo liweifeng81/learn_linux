@@ -32,6 +32,8 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 /* ── helpers ─────────────────────────────────────────── */
 static void separator(const char *title)
@@ -169,7 +171,48 @@ static void demo_waitpid_nohang(void)
         }
     }
 }
+/* ── Demo 6: vfork() — Shared Memory with Parent Until exec/_exit */
+static void demo_vfork() {
+    separator("Demo 6: vfork() — Shared Memory with Parent Until exec/_exit");
+    printf("parent PID=%d\n", getpid());
+    int fd = shm_open("/test", O_RDWR | O_CREAT, 0644);
+    int result = ftruncate(fd, 4096); /* Ensure it has some size */
+    if (result != 0) {
+        perror("ftruncate");
+        close(fd);
+        return;
+    }
 
+    pid_t pid = vfork();
+    if (pid < 0) { perror("vfork"); close(fd);return; }
+    if(pid == 0) {
+        char log[128];
+        sprintf(log, "Child PID=%d, PPID=%d — writing to shared memory before exec()…\n",
+                getpid(), getppid());
+        if(write(STDOUT_FILENO, log, strlen(log)) == -1) {
+            perror("write");
+        }
+        if(dup2(fd, STDOUT_FILENO) == -1) {
+            perror("dup2");
+        }
+        //close(fd);//should not close fd in child, it will close parent's fd as well since they share memory until exec/_exit
+        /* Must call exec() or _exit() immediately after vfork() */
+        execlp("ls", "ls", "-lh", "/", (char *)NULL);
+        perror("execlp ls");
+        _exit(EXIT_FAILURE);
+    }
+    wait(NULL);
+    char *child_output = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+    if (child_output == MAP_FAILED) {
+        perror("mmap");
+        close(fd);        return;
+    }
+    close(fd); /* Can close fd after mmap */
+    printf("[PARENT] read from shared memory (child's output):\n%s", child_output);
+    munmap(child_output, 4096);
+    shm_unlink("/test");
+    printf("[PARENT] vfork child finished\n");
+}
 /* ── main ─────────────────────────────────────────────── */
 int main(void)
 {
@@ -179,6 +222,8 @@ int main(void)
 
     demo_fork_wait();
     demo_exec();
+    demo_vfork();
+
     /* demo_zombie and demo_orphan call exit() internally — run them last */
     demo_waitpid_nohang();
 
@@ -189,6 +234,7 @@ int main(void)
     pid_t o = fork();
     if (o == 0) { demo_orphan(); exit(0); }
     waitpid(o, NULL, 0);
+
 
     printf("\n[DONE] Process demo complete.\n");
     return 0;
