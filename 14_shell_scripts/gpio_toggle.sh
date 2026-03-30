@@ -23,7 +23,7 @@
 #      Lives in .dts/.dtsi files, compiled to .dtb by dtc.
 
 GPIO_NUM="${1:-17}"   # Default: GPIO 17 (BCM numbering, Raspberry Pi)
-SYSFS_GPIO="/sys/class/gpio"
+  ="/sys/class/gpio"
 
 echo "=== GPIO Toggle Demo ==="
 echo "GPIO number : $GPIO_NUM"

@@ -182,14 +182,14 @@ static void demo_timerfd(void)
     }
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     if (epfd < 0) { perror("epoll_create1"); close(tfd); return; }
-    struct epoll_event ev = { .events = EPOLLIN, .data.fd = tfd };
+    struct epoll_event ev = { .events = EPOLLIN | EPOLLET, .data.fd = tfd };
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev) == -1) {
         perror("epoll_ctl");
         close(epfd);
         close(tfd);
         return;
     }
-
+    //sleep(1);
     printf("timerfd firing every 100ms — waiting for 5 expirations…\n");
     int fire_count = 0;
     while (fire_count < 5) {
@@ -200,8 +200,8 @@ static void demo_timerfd(void)
             /* number of expirations since last read */
             if (read(tfd, &exp, sizeof(exp)) == sizeof(exp)) {
                 fire_count += (int)exp;
-                printf("  timerfd fired, exp=%llu, total=%d\n",
-                       (unsigned long long)exp, fire_count);
+                printf("  timerfd fired %d, exp=%llu, total=%d\n",
+                    n, (unsigned long long)exp, fire_count);
             } else {
                 perror("read timerfd");
             }

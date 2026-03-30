@@ -128,6 +128,7 @@ meta-my-layer/
 ### Quick Start (Poky)
 ```bash
 git clone git://git.yoctoproject.org/poky
+git checkout "the branch you want to use, e.g. dunfell for rasppi"
 source poky/oe-init-build-env build/   # sets up build/ dir, activates bitbake
 
 # Edit build/conf/local.conf

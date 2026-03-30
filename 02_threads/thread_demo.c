@@ -61,7 +61,7 @@ static void separator(const char *title)
  * ─────────────────────────────────────────────────────── */
 static void *basic_worker(void *arg)
 {
-    int id = *(int *)arg;
+    int id = (int)(long)arg;
     printf("[Thread %d] TID=%lu running\n", id, (unsigned long)pthread_self());
     sleep(1);
     printf("[Thread %d] done\n", id);
@@ -73,12 +73,10 @@ static void demo_basic_threads(void)
     separator("Demo 1: Thread Create & Join");
 #define N_THREADS 4
     pthread_t tids[N_THREADS];
-    int       ids[N_THREADS];
 
     for (int i = 0; i < N_THREADS; i++) {
-        ids[i] = i + 1;
         //CHECK(pthread_create, &tids[i], NULL, basic_worker, &ids[i]);
-        int err = pthread_create(&tids[i], NULL, basic_worker, &ids[i]);
+        int err = pthread_create(&tids[i], NULL, basic_worker, (void *)(long)i);
         if(err != 0) {
             printf("Error creating thread %d: %s\n", i, strerror(err));
             exit(1);
@@ -93,7 +91,7 @@ static void demo_basic_threads(void)
             exit(1);
         }
         
-        printf("[MAIN ] thread %d, tids %lu, returned %ld\n", ids[i], tids[i], (long)retval);
+        printf("[MAIN ] thread %d, tids %lu, returned %ld\n", i, tids[i], (long)retval);
     }
 #undef N_THREADS
 }
@@ -103,15 +101,15 @@ static void demo_basic_threads(void)
  * ─────────────────────────────────────────────────────── */
 static long        g_counter = 0;
 //static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t g_mutex ;
+#define ITERS 100000
 
 static void *counter_increment(void *arg)
 {
-    int iters = *(int *)arg;
-    for (int i = 0; i < iters; i++) {
-        pthread_mutex_lock(&g_mutex);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)arg;
+    for (int i = 0; i < ITERS; i++) {
+        pthread_mutex_lock(mutex);
         g_counter++;
-        pthread_mutex_unlock(&g_mutex);
+        pthread_mutex_unlock(mutex);
     }
     return NULL;
 }
@@ -120,28 +118,28 @@ static void demo_mutex(void)
 {
     separator("Demo 2: Mutex — Shared Counter");
     //it's no need to use the attr
+    pthread_mutex_t g_mutex ;
+
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_PROCESS_SHARED);
     pthread_mutex_init(&g_mutex, &attr);
     pthread_mutexattr_destroy(&attr);
-
+    
     //pthread_mutex_init(&g_mutex, NULL);
 #define N 4
-#define ITERS 100000
     pthread_t t[N];
-    int iters = ITERS;
     g_counter = 0;
     for (int i = 0; i < N; i++)
-        CHECK(pthread_create, &t[i], NULL, counter_increment, &iters);
+        CHECK(pthread_create, &t[i], NULL, counter_increment, &g_mutex);
     for (int i = 0; i < N; i++)
         CHECK(pthread_join, t[i], NULL);
     printf("Expected: %d  Got: %ld  %s\n",
            N * ITERS, g_counter,
            g_counter == N * ITERS ? "✓ CORRECT" : "✗ RACE DETECTED");
 #undef N
-#undef ITERS
 }
+#undef ITERS
 
 /* ───────────────────────────────────────────────────────────────── *
  * Demo 3: Condition Variable — Producer / Consumer                  *
@@ -278,7 +276,7 @@ static void demo_sem_prod_consumer(void)
 {
     separator("Demo 3.1: semaphor — Producer/Consumer");
     pthread_t prod, cons;
-    sem_init(&_sem_queue.sem_not_full, 0, QUEUE_SIZE);
+    sem_init(&_sem_queue.sem_not_full, 0, 5);
     sem_init(&_sem_queue.sem_not_empty, 0, 0);
 
     int n = 10;
@@ -368,17 +366,64 @@ static void demo_tls(void)
         CHECK(pthread_join, t[i], NULL);
 #undef NT
 }
+struct MyConflictHandler {
+    pthread_mutex_t mutex;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    int count;
+};
+void *producer2(void *arg) {
+    struct MyConflictHandler *n = (struct MyConflictHandler *)arg;
+    pthread_mutex_lock(&n->mutex);
+    for(size_t i = 0; i < 100; i++) {
+        while (n->count > 10)
+            pthread_cond_wait(&n->not_full, &n->mutex);
+        n->count++;
+        printf("[producer] push count: %d\n", n->count);
+        pthread_cond_signal(&n->not_empty);
+    }
+    pthread_mutex_unlock(&n->mutex);
 
+    return NULL;
+}
+void *consumer2(void *arg) {
+    struct MyConflictHandler *n = (struct MyConflictHandler *)arg;
+    pthread_mutex_lock(&n->mutex);
+    for(size_t i = 0; i < 100; i++) {
+        while (n->count == 0)
+            pthread_cond_wait(&n->not_empty, &n->mutex);
+        n->count--;
+        printf("[consumer] pop count: %d\n", n->count);
+        pthread_cond_signal(&n->not_full);
+    }
+    pthread_mutex_unlock(&n->mutex);
+
+    return NULL;
+}
+void demo_cond_var2(void) {
+    separator("Demo 3: Condition Variable — Producer/Consumer");
+    pthread_t prod, cons;
+    struct MyConflictHandler test_data = {
+        .mutex = PTHREAD_MUTEX_INITIALIZER,
+        .not_empty = PTHREAD_COND_INITIALIZER,
+        .not_full = PTHREAD_COND_INITIALIZER,
+        .count = 0,
+    };
+
+    CHECK(pthread_create, &prod, NULL, producer2, &test_data);
+    CHECK(pthread_create, &cons, NULL, consumer2, &test_data);
+    CHECK(pthread_join, prod, NULL);
+    CHECK(pthread_join, cons, NULL);
+}
 /* ─────────────────────────────────────────────────────── *
  * main                                                   *
  * ─────────────────────────────────────────────────────── */
 int main(void)
 {
     printf("=== Embedded Linux Demo: Threads (pthreads) ===\n");
-
     demo_basic_threads();
     demo_mutex();
-    demo_cond_var();
+    demo_cond_var2();
     demo_sem_prod_consumer();
     demo_rwlock();
     demo_tls();

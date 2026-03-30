@@ -86,7 +86,8 @@ static void demo_exec(void)
     if (pid == 0) {
         /* Replace child image with /bin/ls */
         printf("[CHILD ] about to execl /bin/ls …\n");
-        execlp("ls", "ls", "-lh", ".", (char *)NULL);
+        //execlp("ls", "ls", "-lh", ".", (char *)NULL);
+        execl("/bin/ls", "ls", "-lh", ".", (char *)NULL);
         /* execl only returns on error */
         perror("execl");
         exit(EXIT_FAILURE);
@@ -113,10 +114,15 @@ static void demo_zombie(void)
     } else {
         printf("[PARENT] PID=%d NOT calling wait() for 10 s — child is zombie!\n",
                getpid());
-        sleep(10);   /* child is zombie during this window */
-        printf("[PARENT] now reaping zombie with wait()\n");
-        wait(NULL);
-        printf("[PARENT] zombie reaped.\n");
+        //the following code is commented out to keep the child process as a zombie
+        //for demonstration purposes. You can uncomment it to see how the parent reaps the zombie.
+        //and if the parent does not call wait() at all, the zombie will remain until the parent exits,
+        //at which point init/systemd will reap it automatically.
+
+        //sleep(30);   /* child is zombie during this window */
+        //printf("[PARENT] now reaping zombie with wait()\n");
+        //wait(NULL);
+        //printf("[PARENT] zombie reaped.\n");
     }
 }
 
@@ -152,6 +158,7 @@ static void demo_waitpid_nohang(void)
 
     if (pid == 0) {
         sleep(2);
+        printf("[CHILD ] PID=%d exiting after 2s\n", getpid());
         exit(7);
     } else {
         int status;
@@ -159,10 +166,10 @@ static void demo_waitpid_nohang(void)
         for (int i = 0; i < 6; i++) {
             pid_t r = waitpid(pid, &status, WNOHANG);
             if (r == 0) {
-                printf("[PARENT] child still running (poll %d)…\n", i + 1);
+                printf("[PARENT] child still running (poll %d),status=%d\n", i + 1, WIFEXITED(status));
                 usleep(500000); /* 0.5 s */
             } else if (r > 0) {
-                printf("[PARENT] child exited, code=%d\n", WEXITSTATUS(status));
+                printf("[PARENT] child pid=%d, exited, code=%d\n", r, WEXITSTATUS(status));
                 break;
             } else {
                 perror("waitpid");

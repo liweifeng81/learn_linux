@@ -81,7 +81,7 @@ static void demo_basic_fileio(void)
 
     /* File size via lseek(0, SEEK_END) */
     off_t size = lseek(fd, 0, SEEK_END);
-    printf("File size: %lld bytes\n", (long long)size);
+    printf("File size: %ld bytes\n", (long)size);
 
     close(fd);
     unlink(path);

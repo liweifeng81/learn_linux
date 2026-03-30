@@ -76,7 +76,8 @@ static void bug_leak(void)
     char *leak2 = malloc(4096);
     strncpy(leak1, "leaked allocation", 1024);
     strncpy(leak2, "also leaked", 4096);
-    (void)leak1; (void)leak2;
+    (void)leak1;
+    free(leak2);
     /* No free() — valgrind will report lost bytes */
     printf("Allocated 5120 bytes without freeing\n");
 }

@@ -289,6 +289,14 @@ static void demo_signalfd(void)
 int main(void)
 {
     printf("=== Embedded Linux Demo: Signals ===\n");
+
+    struct sigaction sa;
+    sigaction(SIGPIPE, NULL, &sa);
+    if (sa.sa_handler == SIG_IGN)
+        printf("SIGPIPE is already ignored (inherited)\n");
+    else
+        printf("SIGPIPE is active\n");
+        
     demo_signal();
     demo_sigaction();
     demo_sigprocmask();

@@ -67,26 +67,34 @@ static void demo_basic_mq(void)
     mqd_t mq = mq_open(MQ_NAME, O_CREAT | O_RDWR, 0666, &attr);
     if (mq == (mqd_t)-1 && errno != EEXIST) { perror("mq_open"); return; }
 
-    /* Send messages with varying priorities (higher number = higher priority) */
-    const char *msgs[] = { "LOW priority msg",  "HIGH priority msg", "MED priority msg" };
-    unsigned    prios[] = { 1,                    10,                   5 };
-
-    for (int i = 0; i < 3; i++) {
-        mq_send(mq, msgs[i], strlen(msgs[i]) + 1, prios[i]);
-        printf("[SEND] prio=%u  \"%s\"\n", prios[i], msgs[i]);
+    pid_t pid = fork();
+    if (pid < 0) { perror("fork"); return; }
+    if (pid == 0) {
+        execl("./build/mq_send", "mq_send", NULL);
+        perror("execlp");
+        exit(1);
     }
-
-    printf("\n[RECV order — highest priority first]\n");
-    char buf[MAX_SIZE];
-    unsigned recv_prio;
-    for (int i = 0; i < 3; i++) {
-        ssize_t n = mq_receive(mq, buf, MAX_SIZE, &recv_prio);
-        if (n > 0)
-            printf("[RECV] prio=%u  \"%s\"\n", recv_prio, buf);
+    else {
+        /* ── CONSUMER ────────parent───────────────────────────── */
+        wait(NULL); //wait for producer to finish
+        printf("\n[RECV order — highest priority first]\n");
+        char buf[MAX_SIZE];
+        unsigned recv_prio;
+        for (int i = 0; i < 3; i++) {
+            ssize_t n = mq_receive(mq, buf, MAX_SIZE, &recv_prio);
+            if (n > 0)
+                printf("[RECV] prio=%u  \"%s\"\n", recv_prio, buf);
+        }
     }
-
     mq_close(mq);
-    mq_unlink(MQ_NAME);
+    int ret = mq_unlink(MQ_NAME);
+    if (ret == -1) {
+        if (errno == ENOENT) {
+            fprintf(stderr, "mq_unlink: queue already removed\n");
+        } else {
+            perror("mq_unlink");
+        }
+    }
 }
 
 /* ─────────────────────────────────────────────────────── *
